@@ -6,11 +6,20 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	"github.com/imroc/req/v3"
 )
 
+type Config struct {
+	Wordlist     string
+	User_Agent   string
+	Ratelimit    int
+	RequestDelay int
+}
+
 func main() {
-	filecontent, err := os.ReadFile("words.txt")
+	conf := configinit()
+	filecontent, err := os.ReadFile(conf.Wordlist)
 
 	if err != nil {
 		fmt.Println(err.Error())
@@ -21,13 +30,26 @@ func main() {
 	client := req.C()
 
 	for _, words := range wordlist {
-		checkign(strings.ReplaceAll(words, "\r", ""), client)
-		time.Sleep(1 * time.Second)
+		checkign(strings.ReplaceAll(words, "\r", ""), client, conf)
+		time.Sleep(time.Duration(conf.RequestDelay) * time.Second)
 	}
 }
 
-func checkign(username string, client *req.Client) {
-	resp, err := client.R().SetHeader("Accept", "*/*").SetHeader("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:145.0) Gecko/20100101 Firefox/145.0").Get(fmt.Sprintf("https://github.com/signup_check/username?value=%s", username))
+func configinit() *Config {
+
+	var conf Config
+
+	TomlData, err := os.ReadFile("./config.toml")
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(0)
+	}
+	toml.Decode(string(TomlData), &conf)
+	return &conf
+}
+
+func checkign(username string, client *req.Client, conf *Config) {
+	resp, err := client.R().SetHeader("Accept", "*/*").SetHeader("User-Agent", conf.User_Agent).Get(fmt.Sprintf("https://github.com/signup_check/username?value=%s", username))
 	if err != nil {
 		fmt.Println(err.Error())
 		return
@@ -43,7 +65,7 @@ func checkign(username string, client *req.Client) {
 		return
 	case 429:
 		fmt.Println("==== RATE LIMIT COOLDOWN... ====")
-		time.Sleep(2 * time.Minute)
+		time.Sleep(time.Duration(conf.Ratelimit) * time.Second)
 		fmt.Println("==== CONTINUE... ====")
 
 	default:
